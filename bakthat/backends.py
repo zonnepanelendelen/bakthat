@@ -106,12 +106,15 @@ class S3Backend(BakthatBackend):
         TWO_GIGABYTE = 2147483648
         HUNDRED_MEGABYTE = 104857600
 
+        k = Key(self.bucket)
+        k.key = keyname
+
         file_size = os.stat(filename).st_size
         # If file is >2Gb then initiate multipart transfer
         if file_size > TWO_GIGABYTE:
             # Source: http://boto.cloudhackers.com/en/latest/s3_tut.html#storing-large-data
             chunk_size = HUNDRED_MEGABYTE
-            mp = self.bucket.initiate_multipart_upload(os.path.basename(filename))
+            mp = self.bucket.initiate_multipart_upload(k.key)
 
             chunk_count = int(math.ceil(file_size / float(chunk_size)))
 
@@ -135,13 +138,12 @@ class S3Backend(BakthatBackend):
                 mp.complete_upload()
         else:
             # Regular file handling
-            k = Key(self.bucket)
-            k.key = keyname
             upload_kwargs = {"reduced_redundancy": kwargs.get("s3_reduced_redundancy", False)}
             if kwargs.get("cb", True):
                 upload_kwargs = dict(cb=self.cb, num_cb=10)
             k.set_contents_from_filename(filename, **upload_kwargs)
-            k.set_acl("private")
+
+        k.set_acl("private")
 
     def ls(self):
         return [key.name for key in self.bucket.get_all_keys()]
