@@ -12,6 +12,7 @@ from boto.s3.key import Key
 import math
 from boto.glacier.exceptions import UnexpectedHTTPResponseError
 from boto.exception import S3ResponseError
+from filechunkio import FileChunkIO
 
 from bakthat.conf import config, DEFAULT_LOCATION, CONFIG_FILE
 from bakthat.models import Inventory, Jobs
@@ -102,13 +103,45 @@ class S3Backend(BakthatBackend):
         log.info("Upload completion: {0}%".format(percent))
 
     def upload(self, keyname, filename, **kwargs):
-        k = Key(self.bucket)
-        k.key = keyname
-        upload_kwargs = {"reduced_redundancy": kwargs.get("s3_reduced_redundancy", False)}
-        if kwargs.get("cb", True):
-            upload_kwargs = dict(cb=self.cb, num_cb=10)
-        k.set_contents_from_filename(filename, **upload_kwargs)
-        k.set_acl("private")
+        TWO_GIGABYTE = 2147483648
+        HUNDRED_MEGABYTE = 104857600
+
+        file_size = os.stat(filename).st_size
+        # If file is >2Gb then initiate multipart transfer
+        if file_size > TWO_GIGABYTE:
+            # Source: http://boto.cloudhackers.com/en/latest/s3_tut.html#storing-large-data
+            chunk_size = HUNDRED_MEGABYTE
+            mp = self.bucket.initiate_multipart_upload(os.path.basename(filename))
+
+            chunk_count = int(math.ceil(file_size / float(chunk_size)))
+
+            try:
+                # Send the file parts, using FileChunkIO to create a file-like object
+                # that points to a certain byte range within the original file. We
+                # set bytes to never exceed the original file size.
+                for i in range(chunk_count):
+                    log.info('Upload completion: %d%%', (float(i) / chunk_count) * 100)
+
+                    offset = chunk_size * i
+                    bytes = min(chunk_size, file_size - offset)
+                    with FileChunkIO(filename, 'r', offset=offset, bytes=bytes) as fp:
+                        mp.upload_part_from_file(fp, part_num=i + 1)
+            except:
+                # On exception cancel multipart, so we don't pay for extra space and reraise
+                mp.cancel_upload()
+                raise
+            else:
+                # Finish the upload
+                mp.complete_upload()
+        else:
+            # Regular file handling
+            k = Key(self.bucket)
+            k.key = keyname
+            upload_kwargs = {"reduced_redundancy": kwargs.get("s3_reduced_redundancy", False)}
+            if kwargs.get("cb", True):
+                upload_kwargs = dict(cb=self.cb, num_cb=10)
+            k.set_contents_from_filename(filename, **upload_kwargs)
+            k.set_acl("private")
 
     def ls(self):
         return [key.name for key in self.bucket.get_all_keys()]
