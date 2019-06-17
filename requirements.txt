@@ -1,5 +1,5 @@
 peewee
-beefish
+--editable git+https://github.com/zonnepanelendelen/beefish.git@fix-padding#egg=beefish
 boto
 aaargh
 grandfatherson

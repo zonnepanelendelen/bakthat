@@ -17,6 +17,7 @@ setup(
     packages=find_packages(exclude=['ez_setup', 'tests', 'tests.*']),
     long_description=read('README.rst'),
     install_requires=["aaargh", "boto>=2.48.0", "pycrypto", "beefish", "grandfatherson", "peewee", "byteformat==0.2a", "pyyaml", "sh", "requests", "events", "FileChunkIO"],
+    dependency_links=["git+ssh://git@github.com:zonnepanelendelen/beefish.git@fix-padding#egg=beefish"],
     entry_points={'console_scripts': ["bakthat = bakthat:main"]},
     classifiers=[
         "Development Status :: 4 - Beta",
